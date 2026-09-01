@@ -8,6 +8,7 @@ import NavBar from "../NavBar";
 export default function Reglages() {
   const [locataires, setLocataires] = useState([]);
   const [editLoc, setEditLoc] = useState(null);
+  const [ajoutLoc, setAjoutLoc] = useState(null);
   const [notifPrefs, setNotifPrefs] = useState({ repas: true, menage: true, factures: true, echeances: true });
 
   async function charger() {
@@ -36,6 +37,25 @@ export default function Reglages() {
     await supabase.from("locataires").update({
       nom: editLoc.nom, chambre: editLoc.chambre, tel: editLoc.tel, email: editLoc.email,
     }).eq("id", editLoc.id);
+    setEditLoc(null);
+    charger();
+  }
+
+  async function ajouterLocataire() {
+    if (!ajoutLoc?.nom) return;
+    await supabase.from("locataires").insert({
+      nom: ajoutLoc.nom,
+      chambre: ajoutLoc.chambre || "",
+      tel: ajoutLoc.tel || "",
+      email: ajoutLoc.email || "",
+      ordre: locataires.length + 1,
+    });
+    setAjoutLoc(null);
+    charger();
+  }
+
+  async function supprimerLocataire(id) {
+    await supabase.from("locataires").delete().eq("id", id);
     setEditLoc(null);
     charger();
   }
@@ -71,6 +91,12 @@ export default function Reglages() {
               <button onClick={() => setEditLoc(l)} style={{ background: "none", border: "none" }}><Edit2 size={15} color="#9AA6A0" /></button>
             </div>
           ))}
+          <button
+            onClick={() => setAjoutLoc({ nom: "", chambre: "", tel: "", email: "" })}
+            style={{ marginTop: 10, width: "100%", background: "#EEF1EF", border: "none", borderRadius: 10, padding: 10, fontWeight: 600, fontSize: 13, color: "#2F6F63" }}
+          >
+            + Ajouter un locataire
+          </button>
         </div>
 
         <div style={{ background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
@@ -111,6 +137,29 @@ export default function Reglages() {
               <label style={{ fontSize: 12, color: "#5B6B62" }}>Email</label>
               <input value={editLoc.email || ""} onChange={(e) => setEditLoc({ ...editLoc, email: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
               <button onClick={sauvegarder} style={{ background: "#2F6F63", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontWeight: 600, fontSize: 14, marginTop: 6 }}>Enregistrer</button>
+              <button onClick={() => supprimerLocataire(editLoc.id)} style={{ background: "none", color: "#C0463C", border: "none", padding: 6, fontWeight: 600, fontSize: 13 }}>Retirer ce locataire</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ajoutLoc && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(28,38,33,0.5)", display: "flex", alignItems: "flex-end", zIndex: 10 }} onClick={() => setAjoutLoc(null)}>
+          <div style={{ background: "#fff", width: "100%", borderRadius: "18px 18px 0 0", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Ajouter un locataire</div>
+              <X size={18} onClick={() => setAjoutLoc(null)} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ fontSize: 12, color: "#5B6B62" }}>Nom</label>
+              <input value={ajoutLoc.nom} onChange={(e) => setAjoutLoc({ ...ajoutLoc, nom: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
+              <label style={{ fontSize: 12, color: "#5B6B62" }}>Chambre</label>
+              <input value={ajoutLoc.chambre} onChange={(e) => setAjoutLoc({ ...ajoutLoc, chambre: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
+              <label style={{ fontSize: 12, color: "#5B6B62" }}>Téléphone</label>
+              <input value={ajoutLoc.tel} onChange={(e) => setAjoutLoc({ ...ajoutLoc, tel: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
+              <label style={{ fontSize: 12, color: "#5B6B62" }}>Email</label>
+              <input value={ajoutLoc.email} onChange={(e) => setAjoutLoc({ ...ajoutLoc, email: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
+              <button onClick={ajouterLocataire} style={{ background: "#2F6F63", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontWeight: 600, fontSize: 14, marginTop: 6 }}>Ajouter</button>
             </div>
           </div>
         </div>
