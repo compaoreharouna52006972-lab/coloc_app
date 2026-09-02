@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { useRouter } from "next/navigation";
 import { COULEURS } from "../../lib/shared";
-import { Users, Edit2, ChevronUp, ChevronDown, X, Smartphone } from "lucide-react";
+import { Users, Edit2, ChevronUp, ChevronDown, X, Smartphone, LogOut } from "lucide-react";
 import NavBar from "../NavBar";
 
 export default function Reglages() {
+  const router = useRouter();
   const [locataires, setLocataires] = useState([]);
   const [editLoc, setEditLoc] = useState(null);
   const [ajoutLoc, setAjoutLoc] = useState(null);
@@ -66,6 +68,12 @@ export default function Reglages() {
     if (typeof window !== "undefined") localStorage.setItem("notifPrefs", JSON.stringify(next));
   }
 
+  async function deconnecter() {
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <div style={{ minHeight: "100vh", paddingBottom: 76 }}>
       <div style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -118,6 +126,13 @@ export default function Reglages() {
             </div>
           ))}
         </div>
+
+        <button
+          onClick={deconnecter}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#fff", color: "#C0463C", border: "1px solid #F0D0CC", borderRadius: 12, padding: 12, fontWeight: 600, fontSize: 13.5 }}
+        >
+          <LogOut size={15} /> Se déconnecter
+        </button>
       </div>
 
       {editLoc && (
