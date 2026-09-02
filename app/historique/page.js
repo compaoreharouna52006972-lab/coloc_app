@@ -35,6 +35,10 @@ export default function Historique() {
     return (ids || []).map((id) => locataires.find((l) => l.id === id)?.nom).filter(Boolean).join(", ") || "—";
   }
 
+  function euroPdf(n) {
+    return Number(n || 0).toLocaleString("fr-FR").replace(/[\u00A0\u202F]/g, " ") + " DH";
+  }
+
   const facturesFiltrees = factures.filter((f) => {
     const cat = CATEGORIES.find((c) => c.id === f.categorie);
     const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
@@ -66,10 +70,9 @@ export default function Historique() {
     doc.setTextColor(0);
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
-    doc.text(`Total : ${euro(total)} — ${facturesFiltrees.length} facture(s)`, marge, y);
+    doc.text(`Total : ${euroPdf(total)} — ${facturesFiltrees.length} facture(s)`, marge, y);
     y += 10;
 
-    // Colonnes : Date | Catégorie | Montant | Payé par | Statut | Preuve
     const colDate = marge;
     const colCat = marge + 20;
     const colMontant = marge + 52;
@@ -112,7 +115,7 @@ export default function Historique() {
       doc.setFontSize(8);
       doc.text(f.date, colDate, y);
       doc.text(cat?.label || "—", colCat, y);
-      doc.text(euro(f.montant), colMontant, y);
+      doc.text(euroPdf(f.montant), colMontant, y);
       doc.text(lignesPayeurs, colPayeurs, y);
       doc.text(f.statut === "en_attente" ? "En attente" : "Réglée", colStatut, y);
       if (f.justificatif_url) {
