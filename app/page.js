@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { COULEURS, euro } from "../lib/shared";
-import { Users, Bell } from "lucide-react";
+import { Users } from "lucide-react";
 import NavBar from "./NavBar";
 
 export default function Accueil() {
@@ -31,6 +31,8 @@ export default function Accueil() {
 
   const total = factures.reduce((s, f) => s + Number(f.montant), 0);
   const parPersonne = locataires.length ? total / locataires.length : 0;
+  const enAttente = factures.filter((f) => f.statut === "en_attente").length;
+  const sansPreuve = factures.filter((f) => !f.justificatif_url).length;
 
   const soldes = locataires.map((l, i) => {
     const paye = factures.reduce((s, f) => {
@@ -41,39 +43,46 @@ export default function Accueil() {
     return { nom: l.nom, solde: paye - parPersonne, couleur: COULEURS[i % COULEURS.length] };
   });
 
-  if (loading) return <div style={{ padding: 20 }}>Chargement...</div>;
+  if (loading) return <div style={{ padding: 20, color: "#8A968F" }}>Chargement...</div>;
 
   return (
     <div style={{ minHeight: "100vh", paddingBottom: 76 }}>
-      <div style={{ padding: "22px 18px 16px", background: "#1C2621", color: "#EEF1EF", borderRadius: "0 0 20px 20px" }}>
-        <div style={{ fontSize: 12, letterSpacing: 1, opacity: 0.6, textTransform: "uppercase" }}>Appart 4B</div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 2 }}>Bonjour 👋</div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <div style={{ flex: 1, background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, opacity: 0.6 }}>Dépenses du mois</div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{euro(total)}</div>
+      <div style={{ padding: "26px 18px 20px", background: "linear-gradient(160deg, #182521 0%, #1F3229 100%)", color: "#EEF1EF", borderRadius: "0 0 24px 24px" }}>
+        <div style={{ fontSize: 11.5, letterSpacing: 1.2, opacity: 0.55, textTransform: "uppercase", fontWeight: 600 }}>Appart 4B</div>
+        <div style={{ fontSize: 23, fontWeight: 800, marginTop: 3, letterSpacing: -0.3 }}>Bonjour 👋</div>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <div style={{ flex: 1, background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 13px" }}>
+            <div style={{ fontSize: 10.5, opacity: 0.6, fontWeight: 500 }}>Dépenses du mois</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euro(total)}</div>
           </div>
-          <div style={{ flex: 1, background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, opacity: 0.6 }}>Part / personne</div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{euro(Math.round(parPersonne))}</div>
+          <div style={{ flex: 1, background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 13px" }}>
+            <div style={{ fontSize: 10.5, opacity: 0.6, fontWeight: 500 }}>Part / personne</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euro(Math.round(parPersonne))}</div>
           </div>
         </div>
+        {(enAttente > 0 || sansPreuve > 0) && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10, fontSize: 11, opacity: 0.75 }}>
+            {enAttente > 0 && <span>{enAttente} en attente</span>}
+            {enAttente > 0 && sansPreuve > 0 && <span>·</span>}
+            {sansPreuve > 0 && <span>{sansPreuve} sans justificatif</span>}
+          </div>
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
-        <div style={{ background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 17, boxShadow: "0 1px 3px rgba(28,38,33,0.07)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 13 }}>
             <Users size={16} color="#2F6F63" />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>Qui doit quoi</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#182521" }}>Qui doit quoi</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {soldes.map((s) => (
-              <div key={s.nom} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 999, background: s.couleur, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
+              <div key={s.nom} style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 999, background: s.couleur, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700 }}>
                   {s.nom[0]}
                 </div>
-                <div style={{ flex: 1, fontSize: 14 }}>{s.nom}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: s.solde >= 0 ? "#2F6F63" : "#C0463C" }}>
+                <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#182521" }}>{s.nom}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: s.solde >= 0 ? "#2F6F63" : "#C0463C" }}>
                   {s.solde >= 0 ? "+" : ""}{Math.round(s.solde)} DH
                 </div>
               </div>
