@@ -57,40 +57,40 @@ export default function Menage() {
   return (
     <div style={{ minHeight: "100vh", paddingBottom: 76 }}>
       <div style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>Ménage</div>
+        <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3, color: "#182521" }}>Ménage</div>
 
-        <div style={{ background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 17, boxShadow: "0 1px 3px rgba(28,38,33,0.07)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 13 }}>
             <Sparkles size={16} color="#2F6F63" />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>Grand nettoyage — rotation hebdo</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#182521" }}>Grand nettoyage — rotation hebdo</div>
           </div>
           {semaines.map((s, i) => (
-            <div key={s.cle} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < semaines.length - 1 ? "1px solid #EEF1EF" : "none" }}>
-              <div style={{ width: 28, height: 28, borderRadius: 999, background: COULEURS[locataires.findIndex((l) => l.id === s.responsableId) % COULEURS.length] || "#2F6F63", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            <div key={s.cle} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: i < semaines.length - 1 ? "1px solid #EEF1EF" : "none" }}>
+              <div style={{ width: 30, height: 30, borderRadius: 999, background: COULEURS[locataires.findIndex((l) => l.id === s.responsableId) % COULEURS.length] || "#2F6F63", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                 {nomDe(s.responsableId)[0]}
               </div>
               <div style={{ flex: 1 }}>
-                <select value={s.responsableId || ""} onChange={(e) => reassigner(s.cle, e.target.value)} style={{ border: "none", background: "none", fontSize: 13.5, fontWeight: 600, padding: 0 }}>
+                <select value={s.responsableId || ""} onChange={(e) => reassigner(s.cle, e.target.value)} style={{ border: "none", background: "none", fontSize: 14, fontWeight: 600, padding: 0, color: "#182521" }}>
                   {locataires.map((l) => <option key={l.id} value={l.id}>{l.nom}</option>)}
                 </select>
-                <div style={{ fontSize: 11, color: "#5B6B62" }}>{s.semaine}</div>
+                <div style={{ fontSize: 11, color: "#8A968F" }}>{s.semaine}</div>
               </div>
             </div>
           ))}
-          <div style={{ fontSize: 11, color: "#5B6B62", marginTop: 8 }}>Rotation automatique selon l'ordre défini dans Réglages — réassignable ici</div>
+          <div style={{ fontSize: 11, color: "#8A968F", marginTop: 9 }}>Rotation automatique selon l'ordre défini dans Réglages — réassignable ici</div>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 17, boxShadow: "0 1px 3px rgba(28,38,33,0.07)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 13 }}>
             <Home size={16} color="#2F6F63" />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>Récupération du repas — cette semaine</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#182521" }}>Récupération du repas — cette semaine</div>
           </div>
           {JOURS.map((j, i) => {
             const responsableId = repas.find((r) => r.jour_semaine === i)?.responsable_id || locataires[i % (locataires.length || 1)]?.id;
             return (
-              <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <div style={{ width: 30, fontSize: 12, color: "#5B6B62" }}>{j}</div>
-                <select value={responsableId || ""} onChange={(e) => changerRepas(i, e.target.value)} style={{ flex: 1, border: "1px solid #E1E5E2", borderRadius: 8, padding: "6px 8px", fontSize: 13 }}>
+              <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+                <div style={{ width: 30, fontSize: 12, color: "#8A968F", fontWeight: 500 }}>{j}</div>
+                <select value={responsableId || ""} onChange={(e) => changerRepas(i, e.target.value)} style={{ flex: 1, border: "1px solid #E1E5E2", borderRadius: 9, padding: "7px 9px", fontSize: 13 }}>
                   {locataires.map((l) => <option key={l.id} value={l.id}>{l.nom}</option>)}
                 </select>
               </div>
