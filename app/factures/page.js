@@ -8,31 +8,46 @@ import NavBar from "../NavBar";
 export default function Factures() {
   const [locataires, setLocataires] = useState([]);
   const [factures, setFactures] = useState([]);
+  const [payeursMap, setPayeursMap] = useState({});
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [preuveVue, setPreuveVue] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [form, setForm] = useState({ categorie: "electricite", montant: "", paye_par: "", file: null, justificatif_url: null });
+  const [form, setForm] = useState({ categorie: "electricite", montant: "", payeurs: [], file: null, justificatif_url: null });
 
   async function charger() {
     const { data: loc } = await supabase.from("locataires").select("*").order("ordre");
     const { data: fac } = await supabase.from("factures").select("*").order("date", { ascending: false });
+    const { data: fp } = await supabase.from("facture_payeurs").select("*");
     setLocataires(loc || []);
     setFactures(fac || []);
-    if (loc && loc.length && !form.paye_par) setForm((f) => ({ ...f, paye_par: loc[0].id }));
+    const map = {};
+    (fp || []).forEach((r) => {
+      if (!map[r.facture_id]) map[r.facture_id] = [];
+      map[r.facture_id].push(r.locataire_id);
+    });
+    setPayeursMap(map);
+    if (loc && loc.length && form.payeurs.length === 0) setForm((f) => ({ ...f, payeurs: [loc[0].id] }));
   }
 
   useEffect(() => {
     charger();
   }, []);
 
-  function nomDe(id) {
-    return locataires.find((l) => l.id === id)?.nom || "—";
+  function nomsDe(ids) {
+    return (ids || []).map((id) => locataires.find((l) => l.id === id)?.nom).filter(Boolean).join(", ") || "—";
+  }
+
+  function togglePayeur(id) {
+    setForm((f) => ({
+      ...f,
+      payeurs: f.payeurs.includes(id) ? f.payeurs.filter((p) => p !== id) : [...f.payeurs, id],
+    }));
   }
 
   async function enregistrer() {
-    if (!form.montant || !form.paye_par) return;
+    if (!form.montant || form.payeurs.length === 0) return;
     let justificatif_url = form.justificatif_url;
 
     if (form.file) {
@@ -47,23 +62,28 @@ export default function Factures() {
       setUploading(false);
     }
 
+    let factureId = editId;
     if (editId) {
       await supabase.from("factures").update({
         categorie: form.categorie,
         montant: Number(form.montant),
-        paye_par: form.paye_par,
+        paye_par: form.payeurs[0],
         ...(justificatif_url ? { justificatif_url } : {}),
       }).eq("id", editId);
+      await supabase.from("facture_payeurs").delete().eq("facture_id", editId);
     } else {
-      await supabase.from("factures").insert({
+      const { data } = await supabase.from("factures").insert({
         categorie: form.categorie,
         montant: Number(form.montant),
-        paye_par: form.paye_par,
+        paye_par: form.payeurs[0],
         justificatif_url,
-      });
+      }).select().single();
+      factureId = data.id;
     }
 
-    setForm({ categorie: "electricite", montant: "", paye_par: locataires[0]?.id, file: null, justificatif_url: null });
+    await supabase.from("facture_payeurs").insert(form.payeurs.map((id) => ({ facture_id: factureId, locataire_id: id })));
+
+    setForm({ categorie: "electricite", montant: "", payeurs: locataires[0] ? [locataires[0].id] : [], file: null, justificatif_url: null });
     setEditId(null);
     setShowAdd(false);
     charger();
@@ -81,7 +101,7 @@ export default function Factures() {
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>Factures</div>
         <button
           onClick={() => {
-            setForm({ categorie: "electricite", montant: "", paye_par: locataires[0]?.id, file: null, justificatif_url: null });
+            setForm({ categorie: "electricite", montant: "", payeurs: locataires[0] ? [locataires[0].id] : [], file: null, justificatif_url: null });
             setEditId(null);
             setShowAdd(true);
           }}
@@ -94,6 +114,7 @@ export default function Factures() {
           {factures.map((f) => {
             const cat = CATEGORIES.find((c) => c.id === f.categorie);
             const Icon = cat?.icon;
+            const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
             return (
               <div key={f.id} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: "#EEF1EF", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -101,7 +122,7 @@ export default function Factures() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{cat?.label}</div>
-                  <div style={{ fontSize: 11.5, color: "#5B6B62" }}>{f.date} · payé par {nomDe(f.paye_par)}</div>
+                  <div style={{ fontSize: 11.5, color: "#5B6B62" }}>{f.date} · payé par {nomsDe(payeurIds)}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>{euro(f.montant)}</div>
@@ -116,7 +137,7 @@ export default function Factures() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <button
                     onClick={() => {
-                      setForm({ categorie: f.categorie, montant: String(f.montant), paye_par: f.paye_par, file: null, justificatif_url: f.justificatif_url });
+                      setForm({ categorie: f.categorie, montant: String(f.montant), payeurs: payeurIds, file: null, justificatif_url: f.justificatif_url });
                       setEditId(f.id);
                       setShowAdd(true);
                     }}
@@ -136,7 +157,7 @@ export default function Factures() {
 
       {showAdd && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(28,38,33,0.5)", display: "flex", alignItems: "flex-end", zIndex: 10 }} onClick={() => setShowAdd(false)}>
-          <div style={{ background: "#fff", width: "100%", borderRadius: "18px 18px 0 0", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: "#fff", width: "100%", borderRadius: "18px 18px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{editId ? "Modifier la facture" : "Nouvelle facture"}</div>
               <X size={18} onClick={() => setShowAdd(false)} />
@@ -148,10 +169,20 @@ export default function Factures() {
               </select>
               <label style={{ fontSize: 12, color: "#5B6B62" }}>Montant (DH)</label>
               <input type="number" value={form.montant} onChange={(e) => setForm({ ...form, montant: e.target.value })} placeholder="0" style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }} />
-              <label style={{ fontSize: 12, color: "#5B6B62" }}>Payé par</label>
-              <select value={form.paye_par || ""} onChange={(e) => setForm({ ...form, paye_par: e.target.value })} style={{ border: "1px solid #E1E5E2", borderRadius: 10, padding: 10, fontSize: 14 }}>
-                {locataires.map((l) => <option key={l.id} value={l.id}>{l.nom}</option>)}
-              </select>
+              <label style={{ fontSize: 12, color: "#5B6B62" }}>Payé par (coche un ou plusieurs)</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, border: "1px solid #E1E5E2", borderRadius: 10, padding: 10 }}>
+                {locataires.map((l) => (
+                  <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <input type="checkbox" checked={form.payeurs.includes(l.id)} onChange={() => togglePayeur(l.id)} />
+                    {l.nom}
+                  </label>
+                ))}
+              </div>
+              {form.payeurs.length > 1 && form.montant && (
+                <div style={{ fontSize: 11.5, color: "#5B6B62" }}>
+                  Soit {euro(Number(form.montant) / form.payeurs.length)} chacun ({form.payeurs.length} personnes)
+                </div>
+              )}
               <label style={{ fontSize: 12, color: "#5B6B62" }}>Justificatif</label>
               <div style={{ border: "1.5px dashed #C7CFCA", borderRadius: 10, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
                 {form.file || form.justificatif_url ? <Check size={16} color="#2F6F63" /> : <Upload size={16} color="#5B6B62" />}
