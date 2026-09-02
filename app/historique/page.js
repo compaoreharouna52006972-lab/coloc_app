@@ -8,20 +8,28 @@ import NavBar from "../NavBar";
 export default function Historique() {
   const [factures, setFactures] = useState([]);
   const [locataires, setLocataires] = useState([]);
+  const [payeursMap, setPayeursMap] = useState({});
   const [preuveVue, setPreuveVue] = useState(null);
 
   useEffect(() => {
     async function charger() {
       const { data: loc } = await supabase.from("locataires").select("*");
       const { data: fac } = await supabase.from("factures").select("*").order("date", { ascending: false });
+      const { data: fp } = await supabase.from("facture_payeurs").select("*");
       setLocataires(loc || []);
       setFactures(fac || []);
+      const map = {};
+      (fp || []).forEach((r) => {
+        if (!map[r.facture_id]) map[r.facture_id] = [];
+        map[r.facture_id].push(r.locataire_id);
+      });
+      setPayeursMap(map);
     }
     charger();
   }, []);
 
-  function nomDe(id) {
-    return locataires.find((l) => l.id === id)?.nom || "—";
+  function nomsDe(ids) {
+    return (ids || []).map((id) => locataires.find((l) => l.id === id)?.nom).filter(Boolean).join(", ") || "—";
   }
 
   return (
@@ -45,17 +53,20 @@ export default function Historique() {
                   <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{cat.label}</div>
                   <div style={{ fontSize: 12.5, fontWeight: 700 }}>{euro(sousTotal)}</div>
                 </div>
-                {items.map((f) => (
-                  <div key={f.id} style={{ display: "flex", alignItems: "center", fontSize: 11.5, color: "#5B6B62", padding: "3px 0 3px 22px", gap: 8 }}>
-                    <div style={{ flex: 1 }}>{f.date} · {nomDe(f.paye_par)}</div>
-                    <div>{euro(f.montant)}</div>
-                    {f.justificatif_url ? (
-                      <button onClick={() => setPreuveVue(f)} style={{ background: "none", border: "none", color: "#2F6F63", padding: 0 }}>
-                        <FileText size={13} />
-                      </button>
-                    ) : <span style={{ width: 13 }} />}
-                  </div>
-                ))}
+                {items.map((f) => {
+                  const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
+                  return (
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", fontSize: 11.5, color: "#5B6B62", padding: "3px 0 3px 22px", gap: 8 }}>
+                      <div style={{ flex: 1 }}>{f.date} · {nomsDe(payeurIds)}</div>
+                      <div>{euro(f.montant)}</div>
+                      {f.justificatif_url ? (
+                        <button onClick={() => setPreuveVue(f)} style={{ background: "none", border: "none", color: "#2F6F63", padding: 0 }}>
+                          <FileText size={13} />
+                        </button>
+                      ) : <span style={{ width: 13 }} />}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
