@@ -8,14 +8,22 @@ import NavBar from "./NavBar";
 export default function Accueil() {
   const [locataires, setLocataires] = useState([]);
   const [factures, setFactures] = useState([]);
+  const [payeursMap, setPayeursMap] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function charger() {
       const { data: loc } = await supabase.from("locataires").select("*").order("ordre");
       const { data: fac } = await supabase.from("factures").select("*");
+      const { data: fp } = await supabase.from("facture_payeurs").select("*");
       setLocataires(loc || []);
       setFactures(fac || []);
+      const map = {};
+      (fp || []).forEach((r) => {
+        if (!map[r.facture_id]) map[r.facture_id] = [];
+        map[r.facture_id].push(r.locataire_id);
+      });
+      setPayeursMap(map);
       setLoading(false);
     }
     charger();
@@ -25,7 +33,11 @@ export default function Accueil() {
   const parPersonne = locataires.length ? total / locataires.length : 0;
 
   const soldes = locataires.map((l, i) => {
-    const paye = factures.filter((f) => f.paye_par === l.id).reduce((s, f) => s + Number(f.montant), 0);
+    const paye = factures.reduce((s, f) => {
+      const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
+      if (!payeurIds.includes(l.id)) return s;
+      return s + Number(f.montant) / payeurIds.length;
+    }, 0);
     return { nom: l.nom, solde: paye - parPersonne, couleur: COULEURS[i % COULEURS.length] };
   });
 
