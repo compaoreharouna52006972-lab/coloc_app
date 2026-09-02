@@ -48,7 +48,8 @@ export default function Historique() {
     setExporting(true);
     const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
-    const marge = 14;
+    const marge = 12;
+    const largeurPage = 210;
     let y = 20;
 
     doc.setFontSize(16);
@@ -68,43 +69,62 @@ export default function Historique() {
     doc.text(`Total : ${euro(total)} — ${facturesFiltrees.length} facture(s)`, marge, y);
     y += 10;
 
-    doc.setFontSize(9);
-    doc.setFont(undefined, "bold");
-    doc.text("Date", marge, y);
-    doc.text("Catégorie", marge + 22, y);
-    doc.text("Montant", marge + 68, y);
-    doc.text("Payé par", marge + 95, y);
-    doc.text("Statut", marge + 140, y);
-    doc.text("Justificatif", marge + 165, y);
-    y += 2;
-    doc.setDrawColor(200);
-    doc.line(marge, y, 196, y);
-    y += 5;
+    // Colonnes : Date | Catégorie | Montant | Payé par | Statut | Preuve
+    const colDate = marge;
+    const colCat = marge + 20;
+    const colMontant = marge + 52;
+    const colPayeurs = marge + 80;
+    const colStatut = marge + 148;
+    const colPreuve = marge + 175;
+    const largeurPayeurs = colStatut - colPayeurs - 3;
 
-    doc.setFont(undefined, "normal");
+    function enteteTableau() {
+      doc.setFontSize(8.5);
+      doc.setFont(undefined, "bold");
+      doc.text("Date", colDate, y);
+      doc.text("Catégorie", colCat, y);
+      doc.text("Montant", colMontant, y);
+      doc.text("Payé par", colPayeurs, y);
+      doc.text("Statut", colStatut, y);
+      doc.text("Preuve", colPreuve, y);
+      y += 2;
+      doc.setDrawColor(200);
+      doc.line(marge, y, largeurPage - marge, y);
+      y += 5;
+      doc.setFont(undefined, "normal");
+    }
+
+    enteteTableau();
+
     facturesFiltrees.forEach((f) => {
-      if (y > 280) {
-        doc.addPage();
-        y = 20;
-      }
       const cat = CATEGORIES.find((c) => c.id === f.categorie);
       const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
-      doc.setFontSize(8.5);
-      doc.text(f.date, marge, y);
-      doc.text(cat?.label || "—", marge + 22, y);
-      doc.text(euro(f.montant), marge + 68, y);
-      doc.text(nomsDe(payeurIds).slice(0, 22), marge + 95, y);
-      doc.text(f.statut === "en_attente" ? "En attente" : "Réglée", marge + 140, y);
+      const nomsPayeurs = nomsDe(payeurIds);
+      const lignesPayeurs = doc.splitTextToSize(nomsPayeurs, largeurPayeurs);
+      const hauteurLigne = Math.max(6, lignesPayeurs.length * 4 + 2);
+
+      if (y + hauteurLigne > 285) {
+        doc.addPage();
+        y = 20;
+        enteteTableau();
+      }
+
+      doc.setFontSize(8);
+      doc.text(f.date, colDate, y);
+      doc.text(cat?.label || "—", colCat, y);
+      doc.text(euro(f.montant), colMontant, y);
+      doc.text(lignesPayeurs, colPayeurs, y);
+      doc.text(f.statut === "en_attente" ? "En attente" : "Réglée", colStatut, y);
       if (f.justificatif_url) {
         doc.setTextColor(47, 111, 99);
-        doc.textWithLink("Voir", marge + 165, y, { url: f.justificatif_url });
+        doc.textWithLink("Voir", colPreuve, y, { url: f.justificatif_url });
         doc.setTextColor(0);
       } else {
         doc.setTextColor(150);
-        doc.text("—", marge + 165, y);
+        doc.text("—", colPreuve, y);
         doc.setTextColor(0);
       }
-      y += 6;
+      y += hauteurLigne;
     });
 
     doc.save(`factures-appart4b-${new Date().toISOString().slice(0, 10)}.pdf`);
