@@ -2,17 +2,18 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { COULEURS, lundiDeSemaine, formatPeriode, numeroSemaine, cleSemaine } from "../../lib/shared";
-import { Sparkles, Home, Flame } from "lucide-react";
+import { Sparkles, Home, Flame, X } from "lucide-react";
 import NavBar from "../NavBar";
 
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const JOURS_AVEC_CRENEAUX = [0, 1, 2, 3, 4]; // Lun-Ven
+const JOURS_AVEC_CRENEAUX = [0, 1, 2, 3, 4];
 
 export default function Menage() {
   const [locataires, setLocataires] = useState([]);
   const [overrides, setOverrides] = useState({});
   const [repas, setRepas] = useState([]);
   const [rechargesGaz, setRechargesGaz] = useState([]);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function charger() {
     const { data: loc } = await supabase.from("locataires").select("*").order("ordre");
@@ -62,7 +63,6 @@ export default function Menage() {
     charger();
   }
 
-  // Rotation gaz : dernière recharge -> le suivant dans l'ordre des locataires
   const derniereRecharge = rechargesGaz[0];
   const dernierIndex = derniereRecharge ? locataires.findIndex((l) => l.id === derniereRecharge.locataire_id) : -1;
   const prochainIndex = locataires.length ? (dernierIndex + 1) % locataires.length : 0;
@@ -71,6 +71,12 @@ export default function Menage() {
   async function enregistrerRecharge() {
     if (!prochainResponsable) return;
     await supabase.from("gaz_recharges").insert({ locataire_id: prochainResponsable.id });
+    charger();
+  }
+
+  async function supprimerRecharge(id) {
+    await supabase.from("gaz_recharges").delete().eq("id", id);
+    setConfirmDelete(null);
     charger();
   }
 
@@ -130,7 +136,6 @@ export default function Menage() {
                 </div>
               );
             }
-            // Weekend : un seul créneau (moment = "jour")
             const responsableId = repasDe(i, "jour")?.responsable_id || locataires[i % (locataires.length || 1)]?.id;
             return (
               <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
@@ -180,14 +185,32 @@ export default function Menage() {
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 11, color: "#8A968F", fontWeight: 600, marginBottom: 6 }}>Historique</div>
               {rechargesGaz.slice(0, 5).map((r) => (
-                <div key={r.id} style={{ fontSize: 11.5, color: "#5B6B62", padding: "3px 0" }}>
-                  {r.date} · {nomDe(r.locataire_id)}
+                <div key={r.id} style={{ display: "flex", alignItems: "center", fontSize: 11.5, color: "#5B6B62", padding: "4px 0" }}>
+                  <div style={{ flex: 1 }}>{r.date} · {nomDe(r.locataire_id)}</div>
+                  <button onClick={() => setConfirmDelete(r)} style={{ background: "none", border: "none", padding: 0 }}>
+                    <X size={13} color="#C0463C" />
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(24,37,33,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, padding: 24 }} onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 300 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: "#182521" }}>Supprimer cette recharge ?</div>
+            <div style={{ fontSize: 12.5, color: "#5B6B62", marginBottom: 16 }}>
+              Recharge du {confirmDelete.date} par {nomDe(confirmDelete.locataire_id)}. Le calcul du prochain tour sera recalculé automatiquement.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, background: "#EEF1EF", border: "none", borderRadius: 10, padding: 11, fontWeight: 600, fontSize: 13 }}>Annuler</button>
+              <button onClick={() => supprimerRecharge(confirmDelete.id)} style={{ flex: 1, background: "#C0463C", color: "#fff", border: "none", borderRadius: 10, padding: 11, fontWeight: 600, fontSize: 13 }}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
       <NavBar />
     </div>
   );
