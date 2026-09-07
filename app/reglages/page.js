@@ -3,8 +3,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { COULEURS } from "../../lib/shared";
-import { Users, Edit2, ChevronUp, ChevronDown, X, Smartphone, LogOut } from "lucide-react";
+import { Users, Edit2, ChevronUp, ChevronDown, X, Smartphone, LogOut, Bell, Check } from "lucide-react";
 import NavBar from "../NavBar";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
 
 export default function Reglages() {
   const router = useRouter();
@@ -12,10 +19,14 @@ export default function Reglages() {
   const [editLoc, setEditLoc] = useState(null);
   const [ajoutLoc, setAjoutLoc] = useState(null);
   const [notifPrefs, setNotifPrefs] = useState({ repas: true, menage: true, factures: true, echeances: true });
+  const [notifStatus, setNotifStatus] = useState("inconnu");
+  const [userId, setUserId] = useState(null);
 
   async function charger() {
     const { data } = await supabase.from("locataires").select("*").order("ordre");
     setLocataires(data || []);
+    const { data: { user } } = await supabase.auth.getUser();
+    setUserId(user?.id || null);
   }
 
   useEffect(() => {
@@ -23,6 +34,7 @@ export default function Reglages() {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("notifPrefs");
       if (saved) setNotifPrefs(JSON.parse(saved));
+      if ("Notification" in window) setNotifStatus(Notification.permission);
     }
   }, []);
 
@@ -66,6 +78,40 @@ export default function Reglages() {
     const next = { ...notifPrefs, [key]: !notifPrefs[key] };
     setNotifPrefs(next);
     if (typeof window !== "undefined") localStorage.setItem("notifPrefs", JSON.stringify(next));
+  }
+
+  async function activerNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      alert("Les notifications ne sont pas supportées sur ce navigateur.");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotifStatus(permission);
+    if (permission !== "granted") return;
+
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+      });
+    }
+
+    const sub = subscription.toJSON();
+    await supabase.from("push_subscriptions").upsert(
+      {
+        endpoint: sub.endpoint,
+        p256dh: sub.keys.p256dh,
+        auth: sub.keys.auth,
+        locataire_id: null,
+      },
+      { onConflict: "endpoint" }
+    );
+
+    alert("Notifications activées sur cet appareil !");
   }
 
   async function deconnecter() {
@@ -125,6 +171,19 @@ export default function Reglages() {
               </button>
             </div>
           ))}
+
+          <button
+            onClick={activerNotifications}
+            style={{
+              width: "100%", marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: notifStatus === "granted" ? "#EEF4F1" : "#2F6F63",
+              color: notifStatus === "granted" ? "#2F6F63" : "#fff",
+              border: "none", borderRadius: 10, padding: 12, fontWeight: 700, fontSize: 13.5,
+            }}
+          >
+            {notifStatus === "granted" ? <Check size={15} /> : <Bell size={15} />}
+            {notifStatus === "granted" ? "Notifications activées sur cet appareil" : "Activer les notifications"}
+          </button>
         </div>
 
         <button
