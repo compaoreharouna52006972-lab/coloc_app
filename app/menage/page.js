@@ -6,7 +6,7 @@ import { Sparkles, Home, Flame, X } from "lucide-react";
 import NavBar from "../NavBar";
 
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const JOURS_AVEC_CRENEAUX = [0, 1, 2, 3, 4];
+const JOURS_AVEC_CRENEAUX = [0, 1, 2, 3, 4, 5];
 
 export default function Menage() {
   const [locataires, setLocataires] = useState([]);
