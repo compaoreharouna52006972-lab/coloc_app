@@ -1,0 +1,13 @@
+{
+  "name": "Appart 4B",
+  "short_name": "Appart 4B",
+  "description": "Gestion de l'appartement",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#182521",
+  "theme_color": "#182521",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
