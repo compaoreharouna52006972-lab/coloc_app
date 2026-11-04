@@ -1,144 +1,160 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
 import { CATEGORIES, euro } from "../../lib/shared";
-import { History, FileText, Search, Download } from "lucide-react";
+import { chargerFactures } from "../../lib/donnees";
+import { estImage, urlSignee, urlsSignees } from "../../lib/storage";
+import { S } from "../../lib/styles";
+import { History, FileText, Search, Download, X } from "lucide-react";
 import NavBar from "../NavBar";
 
+const SEPT_JOURS = 7 * 24 * 3600;
+
 export default function Historique() {
-  const [factures, setFactures] = useState([]);
-  const [locataires, setLocataires] = useState([]);
-  const [payeursMap, setPayeursMap] = useState({});
+  const [donnees, setDonnees] = useState({ locataires: [], factures: [], payeursMap: {} });
+  const [erreur, setErreur] = useState("");
   const [preuveVue, setPreuveVue] = useState(null);
   const [recherche, setRecherche] = useState("");
   const [filtreCategorie, setFiltreCategorie] = useState("toutes");
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    async function charger() {
-      const { data: loc } = await supabase.from("locataires").select("*");
-      const { data: fac } = await supabase.from("factures").select("*").order("date", { ascending: false });
-      const { data: fp } = await supabase.from("facture_payeurs").select("*");
-      setLocataires(loc || []);
-      setFactures(fac || []);
-      const map = {};
-      (fp || []).forEach((r) => {
-        if (!map[r.facture_id]) map[r.facture_id] = [];
-        map[r.facture_id].push(r.locataire_id);
-      });
-      setPayeursMap(map);
-    }
-    charger();
+    chargerFactures().then(({ erreur, ...reste }) => {
+      setDonnees(reste);
+      setErreur(erreur);
+    });
   }, []);
+
+  const { locataires, factures, payeursMap } = donnees;
 
   function nomsDe(ids) {
     return (ids || []).map((id) => locataires.find((l) => l.id === id)?.nom).filter(Boolean).join(", ") || "—";
   }
 
   function euroPdf(n) {
-    return Number(n || 0).toLocaleString("fr-FR").replace(/[\u00A0\u202F]/g, " ") + " DH";
+    return euro(n).replace(/[\u00A0\u202F]/g, " ");
+  }
+
+  async function ouvrirPreuve(f) {
+    const url = await urlSignee(f.justificatif_url);
+    if (!url) {
+      setErreur("Justificatif introuvable.");
+      return;
+    }
+    setPreuveVue({ url, image: estImage(f.justificatif_url) });
   }
 
   const facturesFiltrees = factures.filter((f) => {
     const cat = CATEGORIES.find((c) => c.id === f.categorie);
     const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
     const noms = nomsDe(payeurIds).toLowerCase();
-    const matchRecherche = !recherche || cat?.label.toLowerCase().includes(recherche.toLowerCase()) || noms.includes(recherche.toLowerCase()) || f.date.includes(recherche);
+    const q = recherche.toLowerCase();
+    const matchRecherche = !q || cat?.label.toLowerCase().includes(q) || noms.includes(q) || String(f.date || "").includes(recherche);
     const matchCategorie = filtreCategorie === "toutes" || f.categorie === filtreCategorie;
     return matchRecherche && matchCategorie;
   });
 
   async function exporterPDF() {
     setExporting(true);
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF();
-    const marge = 12;
-    const largeurPage = 210;
-    let y = 20;
+    try {
+      // Les justificatifs sont privés : le PDF contient des liens temporaires valables 7 jours.
+      const liens = await urlsSignees(
+        facturesFiltrees.map((f) => f.justificatif_url).filter(Boolean),
+        SEPT_JOURS
+      );
 
-    doc.setFontSize(16);
-    doc.setFont(undefined, "bold");
-    doc.text("Appart 4B — Récapitulatif des factures", marge, y);
-    y += 6;
-    doc.setFontSize(9);
-    doc.setFont(undefined, "normal");
-    doc.setTextColor(100);
-    doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR")}`, marge, y);
-    y += 10;
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF();
+      const marge = 12;
+      const largeurPage = 210;
+      let y = 20;
 
-    const total = facturesFiltrees.reduce((s, f) => s + Number(f.montant), 0);
-    doc.setTextColor(0);
-    doc.setFontSize(11);
-    doc.setFont(undefined, "bold");
-    doc.text(`Total : ${euroPdf(total)} — ${facturesFiltrees.length} facture(s)`, marge, y);
-    y += 10;
-
-    const colDate = marge;
-    const colCat = marge + 20;
-    const colMontant = marge + 52;
-    const colPayeurs = marge + 80;
-    const colStatut = marge + 148;
-    const colPreuve = marge + 175;
-    const largeurPayeurs = colStatut - colPayeurs - 3;
-
-    function enteteTableau() {
-      doc.setFontSize(8.5);
+      doc.setFontSize(16);
       doc.setFont(undefined, "bold");
-      doc.text("Date", colDate, y);
-      doc.text("Catégorie", colCat, y);
-      doc.text("Montant", colMontant, y);
-      doc.text("Payé par", colPayeurs, y);
-      doc.text("Statut", colStatut, y);
-      doc.text("Preuve", colPreuve, y);
-      y += 2;
-      doc.setDrawColor(200);
-      doc.line(marge, y, largeurPage - marge, y);
-      y += 5;
+      doc.text("Appart 4B — Récapitulatif des factures", marge, y);
+      y += 6;
+      doc.setFontSize(9);
       doc.setFont(undefined, "normal");
+      doc.setTextColor(100);
+      doc.text(`Généré le ${new Date().toLocaleDateString("fr-FR")} — liens des preuves valables 7 jours`, marge, y);
+      y += 10;
+
+      const totalC = facturesFiltrees.reduce((s, f) => s + Math.round(Number(f.montant || 0) * 100), 0);
+      doc.setTextColor(0);
+      doc.setFontSize(11);
+      doc.setFont(undefined, "bold");
+      doc.text(`Total : ${euroPdf(totalC / 100)} — ${facturesFiltrees.length} facture(s)`, marge, y);
+      y += 10;
+
+      const colDate = marge;
+      const colCat = marge + 20;
+      const colMontant = marge + 52;
+      const colPayeurs = marge + 80;
+      const colStatut = marge + 148;
+      const colPreuve = marge + 175;
+      const largeurPayeurs = colStatut - colPayeurs - 3;
+
+      function enteteTableau() {
+        doc.setFontSize(8.5);
+        doc.setFont(undefined, "bold");
+        doc.text("Date", colDate, y);
+        doc.text("Catégorie", colCat, y);
+        doc.text("Montant", colMontant, y);
+        doc.text("Payé par", colPayeurs, y);
+        doc.text("Statut", colStatut, y);
+        doc.text("Preuve", colPreuve, y);
+        y += 2;
+        doc.setDrawColor(200);
+        doc.line(marge, y, largeurPage - marge, y);
+        y += 5;
+        doc.setFont(undefined, "normal");
+      }
+
+      enteteTableau();
+
+      facturesFiltrees.forEach((f) => {
+        const cat = CATEGORIES.find((c) => c.id === f.categorie);
+        const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
+        const lignesPayeurs = doc.splitTextToSize(nomsDe(payeurIds), largeurPayeurs);
+        const hauteurLigne = Math.max(6, lignesPayeurs.length * 4 + 2);
+
+        if (y + hauteurLigne > 285) {
+          doc.addPage();
+          y = 20;
+          enteteTableau();
+        }
+
+        doc.setFontSize(8);
+        doc.text(String(f.date || "—"), colDate, y);
+        doc.text(cat?.label || "—", colCat, y);
+        doc.text(euroPdf(f.montant), colMontant, y);
+        doc.text(lignesPayeurs, colPayeurs, y);
+        doc.text(f.statut === "en_attente" ? "En attente" : "Réglée", colStatut, y);
+        const lien = f.justificatif_url ? liens[f.justificatif_url] : null;
+        if (lien) {
+          doc.setTextColor(47, 111, 99);
+          doc.textWithLink("Voir", colPreuve, y, { url: lien });
+          doc.setTextColor(0);
+        } else {
+          doc.setTextColor(150);
+          doc.text("—", colPreuve, y);
+          doc.setTextColor(0);
+        }
+        y += hauteurLigne;
+      });
+
+      doc.save(`factures-appart4b-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e) {
+      setErreur("L'export PDF a échoué. Réessaie.");
+    } finally {
+      setExporting(false);
     }
-
-    enteteTableau();
-
-    facturesFiltrees.forEach((f) => {
-      const cat = CATEGORIES.find((c) => c.id === f.categorie);
-      const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
-      const nomsPayeurs = nomsDe(payeurIds);
-      const lignesPayeurs = doc.splitTextToSize(nomsPayeurs, largeurPayeurs);
-      const hauteurLigne = Math.max(6, lignesPayeurs.length * 4 + 2);
-
-      if (y + hauteurLigne > 285) {
-        doc.addPage();
-        y = 20;
-        enteteTableau();
-      }
-
-      doc.setFontSize(8);
-      doc.text(f.date, colDate, y);
-      doc.text(cat?.label || "—", colCat, y);
-      doc.text(euroPdf(f.montant), colMontant, y);
-      doc.text(lignesPayeurs, colPayeurs, y);
-      doc.text(f.statut === "en_attente" ? "En attente" : "Réglée", colStatut, y);
-      if (f.justificatif_url) {
-        doc.setTextColor(47, 111, 99);
-        doc.textWithLink("Voir", colPreuve, y, { url: f.justificatif_url });
-        doc.setTextColor(0);
-      } else {
-        doc.setTextColor(150);
-        doc.text("—", colPreuve, y);
-        doc.setTextColor(0);
-      }
-      y += hauteurLigne;
-    });
-
-    doc.save(`factures-appart4b-${new Date().toISOString().slice(0, 10)}.pdf`);
-    setExporting(false);
   }
 
   return (
     <div style={{ minHeight: "100vh", paddingBottom: 76 }}>
       <div style={{ padding: "18px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3, color: "#182521" }}>Historique</div>
+          <div style={S.titrePage}>Historique</div>
           <button
             onClick={exporterPDF}
             disabled={exporting}
@@ -148,30 +164,23 @@ export default function Historique() {
           </button>
         </div>
 
+        {erreur && <div style={S.erreur}>{erreur}</div>}
+
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "9px 12px", boxShadow: "0 1px 2px rgba(28,38,33,0.06)" }}>
             <Search size={15} color="#9AA6A0" />
-            <input
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder="Rechercher..."
-              style={{ border: "none", outline: "none", fontSize: 13.5, flex: 1, background: "transparent" }}
-            />
+            <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher..." style={{ border: "none", outline: "none", fontSize: 13.5, flex: 1, background: "transparent" }} />
           </div>
-          <select
-            value={filtreCategorie}
-            onChange={(e) => setFiltreCategorie(e.target.value)}
-            style={{ border: "none", borderRadius: 10, padding: "0 10px", fontSize: 13, background: "#fff", boxShadow: "0 1px 2px rgba(28,38,33,0.06)", color: "#5B6B62" }}
-          >
+          <select value={filtreCategorie} onChange={(e) => setFiltreCategorie(e.target.value)} style={{ border: "none", borderRadius: 10, padding: "0 10px", fontSize: 13, background: "#fff", boxShadow: "0 1px 2px rgba(28,38,33,0.06)", color: "#5B6B62" }}>
             <option value="toutes">Toutes</option>
             {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 16, padding: 17, boxShadow: "0 1px 3px rgba(28,38,33,0.07)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <div style={S.carte}>
+          <div style={{ ...S.carteEntete, marginBottom: 14 }}>
             <History size={16} color="#2F6F63" />
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#182521" }}>Toutes les factures par catégorie</div>
+            <div style={S.carteTitre}>Toutes les factures par catégorie</div>
           </div>
           {facturesFiltrees.length === 0 && (
             <div style={{ textAlign: "center", padding: 20, color: "#9AA6A0", fontSize: 13 }}>Aucune facture trouvée</div>
@@ -179,14 +188,14 @@ export default function Historique() {
           {CATEGORIES.map((cat) => {
             const items = facturesFiltrees.filter((f) => f.categorie === cat.id);
             if (!items.length) return null;
-            const sousTotal = items.reduce((s, f) => s + Number(f.montant), 0);
+            const sousTotalC = items.reduce((s, f) => s + Math.round(Number(f.montant || 0) * 100), 0);
             const Icon = cat.icon;
             return (
               <div key={cat.id} style={{ borderBottom: "1px solid #EEF1EF", paddingBottom: 11, marginBottom: 11 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
                   <Icon size={14} color="#2F6F63" />
                   <div style={{ fontSize: 13, fontWeight: 700, flex: 1, color: "#182521" }}>{cat.label}</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#182521" }}>{euro(sousTotal)}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#182521" }}>{euro(sousTotalC / 100)}</div>
                 </div>
                 {items.map((f) => {
                   const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
@@ -198,7 +207,7 @@ export default function Historique() {
                       </div>
                       <div>{euro(f.montant)}</div>
                       {f.justificatif_url ? (
-                        <button onClick={() => setPreuveVue(f)} style={{ background: "none", border: "none", color: "#2F6F63", padding: 0 }}>
+                        <button onClick={() => ouvrirPreuve(f)} style={{ ...S.boutonNu, color: "#2F6F63" }} aria-label="Voir le justificatif">
                           <FileText size={13} />
                         </button>
                       ) : <span style={{ width: 13 }} />}
@@ -213,12 +222,15 @@ export default function Historique() {
       </div>
 
       {preuveVue && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(24,37,33,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, padding: 24 }} onClick={() => setPreuveVue(null)}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 320 }} onClick={(e) => e.stopPropagation()}>
-            {preuveVue.justificatif_url?.match(/\.(jpg|jpeg|png|webp)$/i) ? (
-              <img src={preuveVue.justificatif_url} alt="justificatif" style={{ width: "100%", borderRadius: 10 }} />
+        <div style={S.overlayCentre} onClick={() => setPreuveVue(null)}>
+          <div style={{ ...S.boite, maxWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <X size={17} onClick={() => setPreuveVue(null)} />
+            </div>
+            {preuveVue.image ? (
+              <img src={preuveVue.url} alt="justificatif" style={{ width: "100%", borderRadius: 10 }} />
             ) : (
-              <a href={preuveVue.justificatif_url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: "#EEF4F1", borderRadius: 10, padding: 30, color: "#2F6F63", textDecoration: "none" }}>
+              <a href={preuveVue.url} target="_blank" rel="noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: "#EEF4F1", borderRadius: 10, padding: 30, color: "#2F6F63", textDecoration: "none" }}>
                 <FileText size={30} />
                 <div style={{ fontSize: 12, fontWeight: 600 }}>Ouvrir le fichier</div>
               </a>
