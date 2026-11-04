@@ -1,47 +1,45 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-import { COULEURS, euro } from "../lib/shared";
+import { COULEURS, euroCentimes } from "../lib/shared";
+import { enCentimes, calculerSoldes, moisCourant, dansLeMois } from "../lib/logique.mjs";
+import { chargerFactures } from "../lib/donnees";
+import { S } from "../lib/styles";
 import { Users } from "lucide-react";
 import NavBar from "./NavBar";
 
 export default function Accueil() {
-  const [locataires, setLocataires] = useState([]);
-  const [factures, setFactures] = useState([]);
-  const [payeursMap, setPayeursMap] = useState({});
+  const [donnees, setDonnees] = useState({ locataires: [], factures: [], payeursMap: {} });
+  const [erreur, setErreur] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function charger() {
-      const { data: loc } = await supabase.from("locataires").select("*").order("ordre");
-      const { data: fac } = await supabase.from("factures").select("*");
-      const { data: fp } = await supabase.from("facture_payeurs").select("*");
-      setLocataires(loc || []);
-      setFactures(fac || []);
-      const map = {};
-      (fp || []).forEach((r) => {
-        if (!map[r.facture_id]) map[r.facture_id] = [];
-        map[r.facture_id].push(r.locataire_id);
-      });
-      setPayeursMap(map);
+    chargerFactures().then(({ erreur, ...reste }) => {
+      setDonnees(reste);
+      setErreur(erreur);
       setLoading(false);
-    }
-    charger();
+    });
   }, []);
 
-  const total = factures.reduce((s, f) => s + Number(f.montant), 0);
-  const parPersonne = locataires.length ? total / locataires.length : 0;
-  const enAttente = factures.filter((f) => f.statut === "en_attente").length;
+  const { locataires, factures, payeursMap } = donnees;
+
+  // « Dépenses du mois » : uniquement les factures réglées du mois en cours.
+  const mois = moisCourant();
+  const facturesMois = factures.filter((f) => dansLeMois(f, mois) && f.statut !== "en_attente");
+  const totalMoisC = facturesMois.reduce((s, f) => s + enCentimes(f.montant), 0);
+  const partC = locataires.length ? Math.round(totalMoisC / locataires.length) : 0;
+
+  const enAttente = factures.filter((f) => f.statut === "en_attente");
+  const totalAttenteC = enAttente.reduce((s, f) => s + enCentimes(f.montant), 0);
   const sansPreuve = factures.filter((f) => !f.justificatif_url).length;
 
-  const soldes = locataires.map((l, i) => {
-    const paye = factures.reduce((s, f) => {
-      const payeurIds = payeursMap[f.id] || (f.paye_par ? [f.paye_par] : []);
-      if (!payeurIds.includes(l.id)) return s;
-      return s + Number(f.montant) / payeurIds.length;
-    }, 0);
-    return { nom: l.nom, solde: paye - parPersonne, couleur: COULEURS[i % COULEURS.length] };
-  });
+  // « Qui doit quoi » : solde cumulé depuis le début, factures réglées uniquement.
+  const soldesC = calculerSoldes(locataires, factures, payeursMap);
+  const soldes = locataires.map((l, i) => ({
+    id: l.id,
+    nom: l.nom,
+    solde: soldesC[l.id] || 0,
+    couleur: COULEURS[i % COULEURS.length],
+  }));
 
   if (loading) return <div style={{ padding: 20, color: "#8A968F" }}>Chargement...</div>;
 
@@ -53,40 +51,44 @@ export default function Accueil() {
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <div style={{ flex: 1, background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 13px" }}>
             <div style={{ fontSize: 10.5, opacity: 0.6, fontWeight: 500 }}>Dépenses du mois</div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euro(total)}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euroCentimes(totalMoisC)}</div>
           </div>
           <div style={{ flex: 1, background: "rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 13px" }}>
             <div style={{ fontSize: 10.5, opacity: 0.6, fontWeight: 500 }}>Part / personne</div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euro(Math.round(parPersonne))}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{euroCentimes(partC)}</div>
           </div>
         </div>
-        {(enAttente > 0 || sansPreuve > 0) && (
-          <div style={{ display: "flex", gap: 8, marginTop: 10, fontSize: 11, opacity: 0.75 }}>
-            {enAttente > 0 && <span>{enAttente} en attente</span>}
-            {enAttente > 0 && sansPreuve > 0 && <span>·</span>}
+        {(enAttente.length > 0 || sansPreuve > 0) && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, fontSize: 11, opacity: 0.75 }}>
+            {enAttente.length > 0 && <span>{enAttente.length} en attente ({euroCentimes(totalAttenteC)})</span>}
+            {enAttente.length > 0 && sansPreuve > 0 && <span>·</span>}
             {sansPreuve > 0 && <span>{sansPreuve} sans justificatif</span>}
           </div>
         )}
       </div>
 
       <div style={{ padding: 16 }}>
-        <div style={{ background: "#fff", borderRadius: 16, padding: 17, boxShadow: "0 1px 3px rgba(28,38,33,0.07)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 13 }}>
+        {erreur && <div style={S.erreur}>{erreur}</div>}
+        <div style={S.carte}>
+          <div style={S.carteEntete}>
             <Users size={16} color="#2F6F63" />
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#182521" }}>Qui doit quoi</div>
+            <div style={S.carteTitre}>Qui doit quoi</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {soldes.map((s) => (
-              <div key={s.nom} style={{ display: "flex", alignItems: "center", gap: 11 }}>
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 999, background: s.couleur, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, fontWeight: 700 }}>
                   {s.nom[0]}
                 </div>
                 <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#182521" }}>{s.nom}</div>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: s.solde >= 0 ? "#2F6F63" : "#C0463C" }}>
-                  {s.solde >= 0 ? "+" : ""}{Math.round(s.solde)} DH
+                  {s.solde > 0 ? "+" : ""}{euroCentimes(s.solde)}
                 </div>
               </div>
             ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#8A968F", marginTop: 12 }}>
+            Solde cumulé, factures réglées uniquement. Positif : on te doit de l'argent.
           </div>
         </div>
       </div>

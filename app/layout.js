@@ -2,12 +2,16 @@ export const metadata = {
   title: "Appart 4B",
   description: "Gestion de l'appartement",
   manifest: "/manifest.json",
-  themeColor: "#182521",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Appart 4B",
   },
+};
+
+// Dans Next 14, themeColor ne va plus dans `metadata` mais dans `viewport`.
+export const viewport = {
+  themeColor: "#182521",
 };
 
 export default function RootLayout({ children }) {
