@@ -21,7 +21,9 @@ export async function middleware(request) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user && !request.nextUrl.pathname.startsWith("/login")) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -34,6 +36,13 @@ export async function middleware(request) {
   return response;
 }
 
+// Ce middleware ne doit PAS s'appliquer à :
+//  - /api/send-notifications : appelée par le cron de Vercel, sans cookie de connexion
+//    (elle se protège elle-même avec CRON_SECRET) ;
+//  - /manifest.json, /sw.js, /icon-*.png : le navigateur les charge sans cookies.
+//    Sans cette exclusion, ils étaient redirigés vers /login (installation PWA cassée).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icon-.*\\.png|api/send-notifications).*)",
+  ],
 };
